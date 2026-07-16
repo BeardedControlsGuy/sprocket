@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Sprocket"
+           Manufacturer="Sprocket"
+           Version="3.0.0.0"
+           UpgradeCode="D07C13A1-A7CC-4523-B67F-52390CFFBA8A"
+           Compressed="yes"
+           Scope="perUser">
+
+    <SummaryInformation Description="Sprocket - Niagara Platform Launcher" Manufacturer="Sprocket" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Sprocket is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="SprocketIcon" SourceFile="$(var.AssetsDir)\sprocket.ico" />
+    <Property Id="ARPPRODUCTICON" Value="SprocketIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+      <Directory Id="INSTALLFOLDER" Name="Sprocket">
+        <Component Id="MainExecutable" Guid="*">
+          <File Id="SprocketEXE" Source="$(var.BuildDir)\sprocket.exe" KeyPath="yes" />
+        </Component>
+        <Directory Id="AssetsFolder" Name="assets">
+          <Component Id="AssetIco" Guid="*">
+            <File Id="SprocketICO" Source="$(var.AssetsDir)\sprocket.ico" KeyPath="yes" />
+          </Component>
+          <Component Id="AssetPng" Guid="*">
+            <File Id="SprocketGearPNG" Source="$(var.AssetsDir)\sprocket_gear.png" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Component Id="StartMenuShortcut" Guid="*">
+        <Shortcut Id="SprocketStartMenuShortcut"
+                  Name="Sprocket"
+                  Description="Niagara Platform Launcher"
+                  Target="[INSTALLFOLDER]sprocket.exe"
+                  WorkingDirectory="INSTALLFOLDER"
+                  Icon="SprocketIcon" />
+        <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
+        <RegistryValue Root="HKCU"
+                        Key="Software\Sprocket"
+                        Name="installed"
+                        Type="integer"
+                        Value="1"
+                        KeyPath="yes" />
+      </Component>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Sprocket" Level="1">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="AssetIco" />
+      <ComponentRef Id="AssetPng" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+  </Package>
+</Wix>
