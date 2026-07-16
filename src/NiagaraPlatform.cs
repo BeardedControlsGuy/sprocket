@@ -65,16 +65,8 @@ namespace Sprocket
         {
             get
             {
-                // "custom_home.html" is Sprocket's own generic convention; "ies_home.html" is
-                // kept as a fallback purely for compatibility with pre-existing deployments
-                // that used that filename before this project went standalone.
-                string[] candidates = { "custom_home.html", "ies_home.html" };
-                foreach (string name in candidates)
-                {
-                    string home = Path.Combine(InstallDir, "etc", name);
-                    if (File.Exists(home)) return "file:!etc/" + name;
-                }
-                return null;
+                string home = Path.Combine(InstallDir, "etc", "custom_home.html");
+                return File.Exists(home) ? "file:!etc/custom_home.html" : null;
             }
         }
 
