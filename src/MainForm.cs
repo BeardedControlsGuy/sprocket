@@ -50,9 +50,12 @@ namespace Sprocket
         // tray
         private NotifyIcon _trayIcon;
 
-        // global daemon state (Feature 2 — one-click switchover)
+        // Global daemon state. Windows hosts exactly one Niagara daemon service, so these are
+        // machine-wide, not per-platform: _registeredPlatform owns that service (running or not),
+        // and _runningPlatform is non-null only when it is actually up.
+        private NiagaraPlatform _registeredPlatform;
         private NiagaraPlatform _runningPlatform;
-        private string _opPhase;              // null / "stopping" / "starting"
+        private string _opPhase;              // null / "stopping" / "starting" / "registering"
         private NiagaraPlatform _opFrom;
         private NiagaraPlatform _opTo;
         private bool _opTwoStep;
@@ -218,7 +221,13 @@ namespace Sprocket
             _modulesTile.Click += ModulesTileClicked;
 
             _installDaemonTile = MakeTile("Install Daemon", 0xE7EF); // Admin
-            _installDaemonTile.Click += delegate { LaunchSelected(ProcessLauncher.LaunchPlatformDaemonInstaller); };
+            _installDaemonTile.Click += delegate
+            {
+                NiagaraPlatform p = SelectedPlatform;
+                if (p == null || _opPhase != null) return;
+                SaveLastUsed(p);
+                StartRegisterDaemon(p);
+            };
 
             _importNavTile = MakeTile("Import Nav", 0xE896);         // Download
             _importNavTile.Click += ImportNavTreeClicked;
@@ -535,16 +544,28 @@ namespace Sprocket
 
         private void RefreshGlobalDaemonState()
         {
+            _registeredPlatform = null;
             _runningPlatform = null;
+
+            // One service, so resolve it once and match it to a platform, rather than querying
+            // sc.exe per install (12 installs on a well-used engineering box = 12 processes).
+            string registeredDir = DaemonStatus.RegisteredInstallDir();
+            if (registeredDir == null) return;
+
             foreach (NiagaraPlatform p in _platforms)
             {
-                DaemonState st = DaemonStatus.Query(p);
-                if (st == DaemonState.Running || st == DaemonState.Starting || st == DaemonState.Stopping)
+                if (string.Equals(p.InstallDir.TrimEnd('\\'), registeredDir.TrimEnd('\\'),
+                        StringComparison.OrdinalIgnoreCase))
                 {
-                    _runningPlatform = p;
+                    _registeredPlatform = p;
                     break;
                 }
             }
+            if (_registeredPlatform == null) return;
+
+            DaemonState st = DaemonStatus.Query(_registeredPlatform);
+            if (st == DaemonState.Running || st == DaemonState.Starting || st == DaemonState.Stopping)
+                _runningPlatform = _registeredPlatform;
         }
 
         private void UpdateDaemonUi()
@@ -594,16 +615,23 @@ namespace Sprocket
             bool bannerWasVisible = _banner.Visible;
             if (_opPhase != null)
             {
-                _banner.Message = _opPhase == "stopping"
-                    ? "Stopping daemon on " + _opFrom.DisplayName + "…"
-                    : "Starting daemon on " + _opTo.DisplayName + "…";
+                if (_opPhase == "registering")
+                    _banner.Message = "Re-registering the Niagara service on " + _opTo.DisplayName
+                        + "… approve the administrator prompt if it appears.";
+                else if (_opPhase == "stopping")
+                    _banner.Message = "Stopping daemon on " + _opFrom.DisplayName + "…";
+                else
+                    _banner.Message = "Starting daemon on " + _opTo.DisplayName + "…";
                 _banner.StepText = _opTwoStep ? (_opPhase == "stopping" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "";
                 _banner.Visible = true;
             }
-            else if (somethingElseRunning)
+            else if (_registeredPlatform != null && !SamePlatform(p, _registeredPlatform))
             {
-                _banner.Message = "Daemon is currently running on " + _runningPlatform.DisplayName
-                    + ". Starting it here will stop that one first — one click does both.";
+                // Windows allows only one registered Niagara daemon, so say so plainly rather than
+                // implying this platform has its own service sitting there stopped.
+                _banner.Message = "The Niagara service belongs to " + _registeredPlatform.DisplayName
+                    + (_runningPlatform != null ? " (running)" : " (stopped)")
+                    + ". Moving it here replaces that registration — one click does both.";
                 _banner.StepText = "";
                 _banner.Visible = true;
             }
@@ -613,33 +641,38 @@ namespace Sprocket
             }
             _banner.Invalidate();
 
-            // daemon button
-            bool serviceKnown = DaemonStatus.ServiceNameFor(p) != null;
+            // Daemon button.
+            //
+            // Only the platform that owns the single Niagara service can be started/stopped
+            // directly. For any other platform there is exactly one meaningful action — re-register
+            // the service against it — and that same action covers both "no daemon installed at
+            // all" and "the daemon currently belongs to a different install". The old code split
+            // those into an "Install daemon" path and a "Switch daemon here" path, and the latter
+            // could never work: it stopped the running service and then tried to start a service
+            // for the target that had never existed.
+            bool ownsService = SamePlatform(p, _registeredPlatform);
             if (_opPhase != null)
             {
                 _daemonButton.Enabled = false;
                 _daemonButton.Text = involvedInOp
-                    ? (_opPhase == "stopping" ? "Stopping…" : "Starting…")
-                    : (somethingElseRunning ? "⇄ Switch daemon here" : (selIsRunning ? "Stop daemon" : "Start daemon"));
+                    ? (_opPhase == "registering" ? "Switching…" : (_opPhase == "stopping" ? "Stopping…" : "Starting…"))
+                    : "Daemon";
                 _daemonButton.FillColor = SprocketTheme.PendingTintBg;
                 _daemonButton.FillHoverColor = SprocketTheme.PendingTintBg;
                 _daemonButton.TextColor = SprocketTheme.Pending;
                 _daemonButton.BorderColor = SprocketTheme.PendingTintBorder;
             }
-            else if (!serviceKnown)
+            else if (!ownsService)
             {
-                // No Windows service found for this install yet — most likely the platform
-                // daemon was never installed. Keep this the single obvious primary-row
-                // action rather than a disabled dead end (matches WPL's one always-clickable
-                // Daemon button); falls back to a plain disabled label only if there's truly
-                // no installer to run.
                 bool canInstall = p.HasPlatDaemonInstaller;
                 _daemonButton.Enabled = canInstall;
-                _daemonButton.Text = canInstall ? "Install daemon" : "Daemon";
-                _daemonButton.FillColor = SprocketTheme.CardBg;
-                _daemonButton.FillHoverColor = canInstall ? SprocketTheme.FieldHoverBg : SprocketTheme.CardBg;
-                _daemonButton.TextColor = canInstall ? SprocketTheme.Accent : SprocketTheme.TextTertiary;
-                _daemonButton.BorderColor = SprocketTheme.FieldBorder;
+                _daemonButton.Text = !canInstall
+                    ? "Daemon"
+                    : (_registeredPlatform == null ? "Install daemon here" : "⇄ Move daemon here");
+                _daemonButton.FillColor = canInstall ? SprocketTheme.PendingTintBg : SprocketTheme.CardBg;
+                _daemonButton.FillHoverColor = canInstall ? SprocketTheme.PendingTintBg : SprocketTheme.CardBg;
+                _daemonButton.TextColor = canInstall ? SprocketTheme.Pending : SprocketTheme.TextTertiary;
+                _daemonButton.BorderColor = canInstall ? SprocketTheme.PendingTintBorder : SprocketTheme.FieldBorder;
             }
             else if (selIsRunning)
             {
@@ -650,7 +683,7 @@ namespace Sprocket
                 _daemonButton.TextColor = SprocketTheme.Danger;
                 _daemonButton.BorderColor = SprocketTheme.FieldBorder;
             }
-            else if (!somethingElseRunning)
+            else
             {
                 _daemonButton.Enabled = true;
                 _daemonButton.Text = "Start daemon";
@@ -658,15 +691,6 @@ namespace Sprocket
                 _daemonButton.FillHoverColor = SprocketTheme.FieldHoverBg;
                 _daemonButton.TextColor = SprocketTheme.Success;
                 _daemonButton.BorderColor = SprocketTheme.FieldBorder;
-            }
-            else
-            {
-                _daemonButton.Enabled = true;
-                _daemonButton.Text = "⇄ Switch daemon here";
-                _daemonButton.FillColor = SprocketTheme.PendingTintBg;
-                _daemonButton.FillHoverColor = SprocketTheme.PendingTintBg;
-                _daemonButton.TextColor = SprocketTheme.Pending;
-                _daemonButton.BorderColor = SprocketTheme.PendingTintBorder;
             }
             _daemonButton.Invalidate();
             UpdateTrayTooltip();
@@ -679,26 +703,77 @@ namespace Sprocket
             NiagaraPlatform p = SelectedPlatform;
             if (p == null || _opPhase != null) return;
 
-            if (DaemonStatus.ServiceNameFor(p) == null)
+            if (!SamePlatform(p, _registeredPlatform))
             {
-                if (!p.HasPlatDaemonInstaller) return;
-                ProcessLauncher.LaunchPlatformDaemonInstaller(p);
-                MessageBox.Show(
-                    "Installing the platform daemon service. Once the installer finishes, "
-                    + "click the refresh button to pick up its status here.",
-                    "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                StartRegisterDaemon(p);
                 return;
             }
 
-            bool selIsRunning = SamePlatform(p, _runningPlatform);
-            bool somethingElseRunning = _runningPlatform != null && !selIsRunning;
+            StartSimpleToggle(p, !SamePlatform(p, _runningPlatform));
+        }
 
-            if (selIsRunning)
-                StartSimpleToggle(p, false);
-            else if (!somethingElseRunning)
-                StartSimpleToggle(p, true);
-            else
-                StartSwitch(_runningPlatform, p);
+        /// <summary>
+        /// Makes <paramref name="p"/> the owner of the machine's single Niagara daemon service.
+        ///
+        /// plat.exe installdaemon does the whole job in one elevated step — it stops and deletes an
+        /// existing daemon service belonging to another install, then creates and starts this one —
+        /// so there is no stop-then-start dance to sequence here, and no window where the machine is
+        /// left with no daemon because step 2 failed.
+        /// </summary>
+        private void StartRegisterDaemon(NiagaraPlatform p)
+        {
+            if (!p.HasPlatDaemonInstaller) return;
+
+            string question = (_registeredPlatform == null)
+                ? "Register the Niagara platform daemon for:\r\n\r\n    " + p.DisplayName
+                    + "\r\n\r\nThis installs the Windows service and starts it."
+                : "Move the Niagara platform daemon from:\r\n\r\n    " + _registeredPlatform.DisplayName
+                    + "\r\n\r\nto:\r\n\r\n    " + p.DisplayName
+                    + "\r\n\r\nWindows allows only one registered Niagara daemon, so the existing one "
+                    + "is stopped and unregistered first. Any station it is running will go down.";
+
+            if (MessageBox.Show(question + "\r\n\r\nWindows will ask for administrator approval.",
+                    "Sprocket", MessageBoxButtons.OKCancel, MessageBoxIcon.Warning) != DialogResult.OK)
+                return;
+
+            _opPhase = "registering";
+            _opFrom = _registeredPlatform;
+            _opTo = p;
+            _opTwoStep = false;
+            UpdateDaemonUi();
+
+            Thread t = new Thread(delegate()
+            {
+                DaemonOpResult result = DaemonStatus.InstallDaemon(p);
+
+                // installdaemon starts the service itself, but it returns as soon as the start is
+                // initiated — wait for it to settle so the UI shows the real end state.
+                if (result.Ok)
+                {
+                    string svc = DaemonStatus.ServiceNameFor(p);
+                    if (svc != null) DaemonStatus.WaitForSettled(svc, 60000);
+                }
+
+                if (IsDisposed) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (IsDisposed) return;
+                    _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
+
+                    if (!result.Ok && !result.Cancelled)
+                    {
+                        MessageBox.Show(
+                            "Couldn't register the daemon on " + p.DisplayName + ".\r\n\r\n"
+                            + result.FriendlyError,
+                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+
+                    RefreshGlobalDaemonState();
+                    UpdateDaemonUi();
+                });
+            });
+            t.IsBackground = true;
+            t.Start();
         }
 
         private void StartSimpleToggle(NiagaraPlatform p, bool turnOn)
@@ -725,65 +800,6 @@ namespace Sprocket
                     {
                         MessageBox.Show(
                             "Couldn't " + (turnOn ? "start" : "stop") + " the daemon service.",
-                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    RefreshGlobalDaemonState();
-                    UpdateDaemonUi();
-                });
-            });
-            t.IsBackground = true;
-            t.Start();
-        }
-
-        private void StartSwitch(NiagaraPlatform from, NiagaraPlatform to)
-        {
-            _opPhase = "stopping"; _opFrom = from; _opTo = to; _opTwoStep = true;
-            UpdateDaemonUi();
-
-            Thread t = new Thread(delegate()
-            {
-                string oldService = DaemonStatus.ServiceNameFor(from);
-                bool okStop = oldService != null && DaemonStatus.SetRunning(oldService, false);
-                if (okStop) DaemonStatus.WaitForSettled(oldService, 45000);
-
-                if (!okStop)
-                {
-                    if (IsDisposed) return;
-                    BeginInvoke((MethodInvoker)delegate
-                    {
-                        if (IsDisposed) return;
-                        _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
-                        MessageBox.Show(
-                            "Couldn't stop the daemon on " + from.DisplayName + " — leaving it running.",
-                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        RefreshGlobalDaemonState();
-                        UpdateDaemonUi();
-                    });
-                    return;
-                }
-
-                if (IsDisposed) return;
-                BeginInvoke((MethodInvoker)delegate
-                {
-                    if (IsDisposed) return;
-                    _opPhase = "starting";
-                    UpdateDaemonUi();
-                });
-
-                string newService = DaemonStatus.ServiceNameFor(to);
-                bool okStart = newService != null && DaemonStatus.SetRunning(newService, true);
-                if (okStart) DaemonStatus.WaitForSettled(newService, 45000);
-
-                if (IsDisposed) return;
-                BeginInvoke((MethodInvoker)delegate
-                {
-                    if (IsDisposed) return;
-                    _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
-                    if (!okStart)
-                    {
-                        MessageBox.Show(
-                            "Stopped the daemon on " + from.DisplayName + ", but couldn't start it on "
-                            + to.DisplayName + ".",
                             "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                     RefreshGlobalDaemonState();

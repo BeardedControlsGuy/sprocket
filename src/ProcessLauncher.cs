@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Windows.Forms;
 
@@ -46,10 +46,9 @@ namespace Sprocket
             Start(platform.ConsoleExe, "", platform.InstallDir, "Console");
         }
 
-        public static void LaunchPlatformDaemonInstaller(NiagaraPlatform platform)
-        {
-            Start(platform.PlatExe, "installdaemon", platform.InstallDir, "Platform Daemon installer");
-        }
+        // Daemon registration deliberately does NOT live here: it needs UAC elevation plus output
+        // capture, which this fire-and-forget ShellExecute helper can't provide. See
+        // DaemonStatus.InstallDaemon.
 
         public static void OpenInstallFolder(NiagaraPlatform platform)
         {
