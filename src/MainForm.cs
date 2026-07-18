@@ -20,6 +20,7 @@ namespace Sprocket
         private Label _subtitle;
         private GhostIconButton _refreshButton;
         private GhostIconButton _foldersButton;
+        private ToolTip _tips;
 
         // body
         private PillSelect _platformSelect;
@@ -45,6 +46,9 @@ namespace Sprocket
         private Label _versionLabel;
         private LinkLabel _updateLink;
 
+        // tray
+        private NotifyIcon _trayIcon;
+
         // global daemon state (Feature 2 — one-click switchover)
         private NiagaraPlatform _runningPlatform;
         private string _opPhase;              // null / "stopping" / "starting"
@@ -60,6 +64,7 @@ namespace Sprocket
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                 | ControlStyles.ResizeRedraw, true);
+            HandleCreated += delegate { DwmUtil.RequestRoundedCorners(this); };
             BuildUi();
             LoadIcon();
             Rescan();
@@ -79,7 +84,11 @@ namespace Sprocket
 
         protected override void Dispose(bool disposing)
         {
-            if (disposing) _backdrop.Dispose();
+            if (disposing)
+            {
+                _backdrop.Dispose();
+                if (_trayIcon != null) _trayIcon.Dispose();
+            }
             base.Dispose(disposing);
         }
 
@@ -91,6 +100,7 @@ namespace Sprocket
                 try { this.Icon = new Icon(icoPath); }
                 catch { }
             }
+            if (_trayIcon != null) _trayIcon.Icon = this.Icon ?? System.Drawing.SystemIcons.Application;
         }
 
         // ---------------------------------------------------------------- UI
@@ -141,9 +151,9 @@ namespace Sprocket
             _foldersButton.Click += FoldersClicked;
             Controls.Add(_foldersButton);
 
-            ToolTip tips = new ToolTip();
-            tips.SetToolTip(_refreshButton, "Rescan for Niagara installs");
-            tips.SetToolTip(_foldersButton, "Locations && language");
+            _tips = new ToolTip();
+            _tips.SetToolTip(_refreshButton, "Rescan for Niagara installs");
+            _tips.SetToolTip(_foldersButton, "Locations && language");
 
             // body
             _platformSelect = new PillSelect();
@@ -169,7 +179,12 @@ namespace Sprocket
             _launchButton = new HeroButton();
             _launchButton.Text = "Launch Workbench";
             _launchButton.Click += delegate { LaunchSelected(ProcessLauncher.LaunchWorkbench); };
+            ContextMenuStrip launchMenu = new ContextMenuStrip();
+            launchMenu.Items.Add("Launch Workbench (with console)", null,
+                delegate { LaunchSelected(ProcessLauncher.LaunchWorkbenchWithConsole); });
+            _launchButton.ContextMenuStrip = launchMenu;
             Controls.Add(_launchButton);
+            _tips.SetToolTip(_launchButton, "Right-click for Workbench with console");
 
             _daemonButton = new HeroButton();
             _daemonButton.Text = "Daemon";
@@ -246,8 +261,47 @@ namespace Sprocket
             };
             Controls.Add(_updateLink);
 
+            _trayIcon = new NotifyIcon();
+            _trayIcon.Text = "Sprocket";
+            ContextMenuStrip trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("Show Sprocket", null, delegate { RestoreFromTray(); });
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add("Exit", null, delegate { _trayIcon.Visible = false; Close(); });
+            _trayIcon.ContextMenuStrip = trayMenu;
+            _trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+
             Resize += delegate { DoLayout(); };
             DoLayout();
+        }
+
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            if (WindowState == FormWindowState.Minimized && _trayIcon != null)
+            {
+                ShowInTaskbar = false;
+                _trayIcon.Visible = true;
+            }
+        }
+
+        private void RestoreFromTray()
+        {
+            ShowInTaskbar = true;
+            WindowState = FormWindowState.Normal;
+            Show();
+            Activate();
+            if (_trayIcon != null) _trayIcon.Visible = false;
+        }
+
+        /// <summary>Keeps the tray icon's hover tooltip glanceable while minimized — mirrors the
+        /// status card. NotifyIcon.Text throws past 63 chars on some Framework builds, so truncate.</summary>
+        private void UpdateTrayTooltip()
+        {
+            if (_trayIcon == null) return;
+            NiagaraPlatform p = SelectedPlatform;
+            string text = p == null ? "Sprocket" : "Sprocket — " + p.DisplayName + " (" + _statusPanel.StateText + ")";
+            if (text.Length > 63) text = text.Substring(0, 60) + "...";
+            _trayIcon.Text = text;
         }
 
         private IconTile MakeTile(string text, int glyphCodepoint)
@@ -604,6 +658,7 @@ namespace Sprocket
                 _daemonButton.BorderColor = SprocketTheme.PendingTintBorder;
             }
             _daemonButton.Invalidate();
+            UpdateTrayTooltip();
 
             if (bannerWasVisible != _banner.Visible) DoLayout();
         }

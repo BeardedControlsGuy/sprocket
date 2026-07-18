@@ -56,6 +56,7 @@ namespace Sprocket
 
         public ModulesForm(List<NiagaraPlatform> platforms, NiagaraPlatform initialSource)
         {
+            HandleCreated += delegate { DwmUtil.RequestRoundedCorners(this); };
             _platforms = platforms;
             BuildUi();
 

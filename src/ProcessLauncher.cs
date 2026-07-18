@@ -15,6 +15,18 @@ namespace Sprocket
             Start(platform.WbWExe, args, platform.InstallDir, "Workbench");
         }
 
+        /// <summary>Workbench with its console window left visible alongside the GUI — matches
+        /// WorkPlace Launcher's "program-console" mode, useful for seeing stack traces that
+        /// don't make it into a dialog.</summary>
+        public static void LaunchWorkbenchWithConsole(NiagaraPlatform platform)
+        {
+            string args = "-profile:workbench:WbProfile" + LocaleArg();
+            string home = platform.CustomHomeOrd;
+            if (home != null) args += " " + home;
+
+            Start(platform.WbExe, args, platform.InstallDir, "Workbench (with console)");
+        }
+
         public static void LaunchAlarmPortal(NiagaraPlatform platform)
         {
             Start(platform.WbWExe, "-profile:alarm:AlarmPortalProfile" + LocaleArg(),

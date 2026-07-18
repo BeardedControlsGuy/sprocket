@@ -19,6 +19,7 @@ namespace Sprocket
 
         public LocationsForm()
         {
+            HandleCreated += delegate { DwmUtil.RequestRoundedCorners(this); };
             _settings = UserSettings.Load();
             BuildUi();
         }

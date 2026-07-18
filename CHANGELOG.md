@@ -1,5 +1,31 @@
 # Changelog
 
+## v3.1.0 — 2026-07-18
+
+**Visual modernization + several feature additions, reviewed against a design handoff and
+the original WorkPlace Launcher's own source.**
+
+- Reskinned to a flatter, calmer dark palette — no more gradient/shimmer hero button or
+  aurora-blob backdrop; flat fills, hairline borders, and a dedicated pending/amber state
+  for in-progress daemon operations (separate from the ember brand accent).
+- **One-click daemon switchover**: selecting a platform whose daemon isn't running, while
+  a different platform's daemon is, now shows a banner and a single "Switch daemon here"
+  button that stops the old one and starts the new one in sequence — no more manually
+  stopping platform A before starting platform B.
+- **Module manager**: new window to diff a source platform's `\modules` folder against
+  a target platform and copy over anything missing, with per-jar version parsing.
+- **Scan roots surfaced in the platform dropdown**: remembered extra folders (previously
+  only visible in the Locations dialog) now show inline with quick add/remove.
+- **Nav Tree import/export**: save a platform's `navTree.xml` to a file, or load one in —
+  closes the biggest gap versus WorkPlace Launcher's nav-tree sync feature.
+- **Launch Workbench (with console)**: right-click the Launch button for Workbench with
+  its console window left visible, for troubleshooting — WorkPlace Launcher's
+  `program-console` mode, previously missing here.
+- **Rounded window corners** on every window, matching native Windows 11 chrome.
+- **System tray**: minimizing now hides the taskbar entry and drops into the tray instead
+  (closing with the X still exits normally); the tray icon's tooltip mirrors the current
+  platform and daemon state.
+
 ## v3.0.0 — 2026-07-16
 
 **Sprocket is now a standalone app** — no more third-party branding, so it can be handed

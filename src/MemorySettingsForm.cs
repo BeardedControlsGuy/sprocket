@@ -13,6 +13,7 @@ namespace Sprocket
 
         public MemorySettingsForm(NiagaraPlatform platform)
         {
+            HandleCreated += delegate { DwmUtil.RequestRoundedCorners(this); };
             _platform = platform;
             BuildUi();
             LoadValues();
