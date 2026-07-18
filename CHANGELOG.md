@@ -1,5 +1,26 @@
 # Changelog
 
+## v3.1.1 — 2026-07-18
+
+**Fixes found on a second machine's Honeywell install, plus a WorkPlace Launcher theme
+picker.**
+
+- **Fixed:** the platform dropdown, daemon messages, and tray tooltip could show a wrong,
+  paragraph-length name (e.g. "Welcome to Optimizer Supervisor") instead of the actual
+  install name. Some OEM `brand.properties` files set `workbench.title` to a splash-screen
+  sentence rather than a short label; Sprocket was trusting it as the display name. Now
+  always uses the install folder name, matching WorkPlace Launcher's own behavior — this
+  also fixes Nav Tree / Memory Settings silently targeting the wrong path on affected
+  installs, since the user-home folder falls back to the display name when a brand ID
+  isn't set.
+- **Fixed:** a platform whose daemon Windows service was never installed showed a
+  disabled, unlabeled "Daemon" button with no way forward. It now reads **"Install
+  daemon"** and runs the installer directly, so there's always one obvious action
+  regardless of state.
+- **Added:** a Workbench theme picker (new "Theme" quick action) — scans the platform's
+  `\modules` folder for theme jars and sets the chosen one as the locked default in
+  `brand.properties`, the same mechanism WorkPlace Launcher used.
+
 ## v3.1.0 — 2026-07-18
 
 **Visual modernization + several feature additions, reviewed against a design handoff and

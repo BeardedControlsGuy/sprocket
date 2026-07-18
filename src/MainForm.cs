@@ -39,6 +39,7 @@ namespace Sprocket
         private IconTile _installDaemonTile;
         private IconTile _importNavTile;
         private IconTile _exportNavTile;
+        private IconTile _themeTile;
         private IconTile[] _tiles;
 
         // footer
@@ -112,8 +113,8 @@ namespace Sprocket
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
             BackColor = SprocketTheme.WindowBg;
-            ClientSize = new Size(600, 610);
-            MinimumSize = new Size(560, 590);
+            ClientSize = new Size(600, 674);
+            MinimumSize = new Size(560, 654);
 
             // header
             _gear = new PictureBox();
@@ -225,10 +226,14 @@ namespace Sprocket
             _exportNavTile = MakeTile("Export Nav", 0xE898);         // Upload
             _exportNavTile.Click += ExportNavTreeClicked;
 
+            _themeTile = MakeTile("Theme", 0xE771);                  // Color
+            _themeTile.Click += ThemeTileClicked;
+
             _tiles = new IconTile[]
             {
                 _alarmTile, _consoleTile, _openFolderTile, _memoryTile,
-                _modulesTile, _installDaemonTile, _importNavTile, _exportNavTile
+                _modulesTile, _installDaemonTile, _importNavTile, _exportNavTile,
+                _themeTile
             };
 
             // footer
@@ -623,11 +628,17 @@ namespace Sprocket
             }
             else if (!serviceKnown)
             {
-                _daemonButton.Enabled = false;
-                _daemonButton.Text = "Daemon";
+                // No Windows service found for this install yet — most likely the platform
+                // daemon was never installed. Keep this the single obvious primary-row
+                // action rather than a disabled dead end (matches WPL's one always-clickable
+                // Daemon button); falls back to a plain disabled label only if there's truly
+                // no installer to run.
+                bool canInstall = p.HasPlatDaemonInstaller;
+                _daemonButton.Enabled = canInstall;
+                _daemonButton.Text = canInstall ? "Install daemon" : "Daemon";
                 _daemonButton.FillColor = SprocketTheme.CardBg;
-                _daemonButton.FillHoverColor = SprocketTheme.CardBg;
-                _daemonButton.TextColor = SprocketTheme.TextTertiary;
+                _daemonButton.FillHoverColor = canInstall ? SprocketTheme.FieldHoverBg : SprocketTheme.CardBg;
+                _daemonButton.TextColor = canInstall ? SprocketTheme.Accent : SprocketTheme.TextTertiary;
                 _daemonButton.BorderColor = SprocketTheme.FieldBorder;
             }
             else if (selIsRunning)
@@ -667,7 +678,17 @@ namespace Sprocket
         {
             NiagaraPlatform p = SelectedPlatform;
             if (p == null || _opPhase != null) return;
-            if (DaemonStatus.ServiceNameFor(p) == null) return;
+
+            if (DaemonStatus.ServiceNameFor(p) == null)
+            {
+                if (!p.HasPlatDaemonInstaller) return;
+                ProcessLauncher.LaunchPlatformDaemonInstaller(p);
+                MessageBox.Show(
+                    "Installing the platform daemon service. Once the installer finishes, "
+                    + "click the refresh button to pick up its status here.",
+                    "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
             bool selIsRunning = SamePlatform(p, _runningPlatform);
             bool somethingElseRunning = _runningPlatform != null && !selIsRunning;
@@ -831,6 +852,14 @@ namespace Sprocket
             NiagaraPlatform p = SelectedPlatform;
             if (p == null) return;
             using (ModulesForm dlg = new ModulesForm(_platforms, p))
+                dlg.ShowDialog(this);
+        }
+
+        private void ThemeTileClicked(object sender, EventArgs e)
+        {
+            NiagaraPlatform p = SelectedPlatform;
+            if (p == null) return;
+            using (ThemeForm dlg = new ThemeForm(p))
                 dlg.ShowDialog(this);
         }
 

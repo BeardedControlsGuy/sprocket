@@ -36,6 +36,11 @@ namespace Sprocket
             get { return Path.Combine(UserHomeDir, "etc", "nre.properties"); }
         }
 
+        public string BrandPropertiesPath
+        {
+            get { return Path.Combine(InstallDir, "etc", "brand.properties"); }
+        }
+
         public string BinDir
         {
             get { return Path.Combine(InstallDir, "bin"); }

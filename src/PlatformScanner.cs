@@ -74,15 +74,23 @@ namespace Sprocket
         {
             NiagaraPlatform p = new NiagaraPlatform();
             p.InstallDir = installDir;
+            // Always the folder name (e.g. "OptimizerSupervisor-N4.15.1.16") — matches
+            // WorkPlace Launcher's own dropdown label and, unlike brand.properties'
+            // workbench.title below, is guaranteed short and unique. Also used to build
+            // UserHomeDir when brand.id is missing, so it needs to stay path-safe.
             p.DisplayName = Path.GetFileName(installDir);
 
             string brandPropsPath = Path.Combine(installDir, "etc", "brand.properties");
             if (File.Exists(brandPropsPath))
             {
                 Dictionary<string, string> props = ReadProperties(brandPropsPath);
-                string title;
-                if (props.TryGetValue("workbench.title", out title) && !string.IsNullOrEmpty(title))
-                    p.DisplayName = title;
+
+                // workbench.title is meant for a Workbench window title / splash banner, not
+                // a short list label — some OEM brand.properties (seen on a Honeywell
+                // OptimizerSupervisor install) set it to a full sentence like "Welcome to
+                // Optimizer Supervisor", which showed up verbatim as the platform's name
+                // everywhere (dropdown, daemon messages, tray tooltip). Never trust it as
+                // DisplayName; folder name above is always what's shown.
 
                 string brandId;
                 if (props.TryGetValue("brand.id", out brandId))
