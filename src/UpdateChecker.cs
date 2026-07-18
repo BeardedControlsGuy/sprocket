@@ -39,6 +39,14 @@ namespace Sprocket
         {
             try
             {
+                // GitHub's API has required TLS 1.2+ since 2022. .NET Framework's default
+                // SecurityProtocol depends on machine-level config (registry "SchUseStrongCrypto"
+                // etc) that isn't consistent across Windows installs — without this, the TLS
+                // handshake can fail silently on some machines and never on others, and the
+                // catch-all below (by design, so a flaky connection never interrupts the app)
+                // would swallow it with zero indication why the update notice never appears.
+                ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(ReleasesUrl);
                 req.UserAgent = "Sprocket/" + AppVersion.Display;
                 req.Accept = "application/vnd.github+json";

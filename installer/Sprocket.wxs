@@ -2,7 +2,7 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="Sprocket"
            Manufacturer="Sprocket"
-           Version="3.1.1.0"
+           Version="3.1.2.0"
            UpgradeCode="D07C13A1-A7CC-4523-B67F-52390CFFBA8A"
            Compressed="yes"
            Scope="perUser">

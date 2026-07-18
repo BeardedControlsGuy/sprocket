@@ -1,5 +1,21 @@
 # Changelog
 
+## v3.1.2 — 2026-07-18
+
+**Fixed the update checker itself** — it could silently never detect a newer release on
+some machines. `HttpWebRequest` calls to GitHub's API weren't explicitly opting into TLS
+1.2, and .NET Framework's default security protocol isn't consistent across Windows
+installs; on a machine where it defaults below TLS 1.2 (which GitHub's API has required
+since 2022), the connection failed with no visible error — the update check is designed
+to fail silently so a flaky connection never interrupts the app, which meant this had no
+symptom other than "no update notice ever appears." Confirmed the failure mode directly
+(TLS 1.0/1.1-only fails against GitHub's API; TLS 1.2 succeeds) and fixed by explicitly
+enabling `SecurityProtocolType.Tls12` before the request.
+
+If you're on v3.1.1 or earlier, this same bug may be why you never saw an update notice —
+you'll need to grab this one from the Releases page directly rather than the in-app link.
+From v3.1.2 onward the checker itself is fixed, so future releases should notify normally.
+
 ## v3.1.1 — 2026-07-18
 
 **Fixes found on a second machine's Honeywell install, plus a WorkPlace Launcher theme
