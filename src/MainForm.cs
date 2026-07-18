@@ -16,33 +16,41 @@ namespace Sprocket
 
         // header
         private PictureBox _gear;
-        private GradientTitle _title;
+        private Label _title;
         private Label _subtitle;
         private GhostIconButton _refreshButton;
         private GhostIconButton _foldersButton;
 
         // body
         private PillSelect _platformSelect;
+        private InfoBanner _banner;
         private StatusPanel _statusPanel;
         private EmptyCard _emptyCard;
         private HeroButton _launchButton;
+        private HeroButton _daemonButton;
         private Label _quickLabel;
 
         private IconTile _alarmTile;
         private IconTile _consoleTile;
         private IconTile _openFolderTile;
         private IconTile _memoryTile;
-        private IconTile _addModulesTile;
+        private IconTile _modulesTile;
         private IconTile _installDaemonTile;
         private IconTile _importNavTile;
         private IconTile _exportNavTile;
-        private IconTile _daemonToggleTile;
         private IconTile[] _tiles;
 
         // footer
-        private GradientBar _footerBar;
+        private Panel _footerHairline;
         private Label _versionLabel;
         private LinkLabel _updateLink;
+
+        // global daemon state (Feature 2 — one-click switchover)
+        private NiagaraPlatform _runningPlatform;
+        private string _opPhase;              // null / "stopping" / "starting"
+        private NiagaraPlatform _opFrom;
+        private NiagaraPlatform _opTo;
+        private bool _opTwoStep;
 
         private static readonly string SettingsPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -93,9 +101,9 @@ namespace Sprocket
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = true;
             StartPosition = FormStartPosition.CenterScreen;
-            BackColor = SprocketTheme.Ink;
-            ClientSize = new Size(600, 724);
-            MinimumSize = new Size(560, 744);
+            BackColor = SprocketTheme.WindowBg;
+            ClientSize = new Size(600, 610);
+            MinimumSize = new Size(560, 590);
 
             // header
             _gear = new PictureBox();
@@ -109,15 +117,18 @@ namespace Sprocket
             }
             Controls.Add(_gear);
 
-            _title = new GradientTitle();
+            _title = new Label();
             _title.Text = "Sprocket";
+            _title.ForeColor = SprocketTheme.TextPrimary;
+            _title.BackColor = Color.Transparent;
+            _title.Font = new Font(SprocketTheme.HeadingFamily, 16F, FontStyle.Bold);
             Controls.Add(_title);
 
             _subtitle = new Label();
-            _subtitle.Text = SprocketTheme.Track("NIAGARA PLATFORM LAUNCHER");
-            _subtitle.ForeColor = SprocketTheme.TextMuted;
+            _subtitle.Text = "Niagara platform launcher";
+            _subtitle.ForeColor = SprocketTheme.TextSecondary;
             _subtitle.BackColor = Color.Transparent;
-            _subtitle.Font = new Font(SprocketTheme.BodyFamily, 7.25F, FontStyle.Bold);
+            _subtitle.Font = new Font(SprocketTheme.BodyFamily, 8.25F);
             Controls.Add(_subtitle);
 
             _refreshButton = new GhostIconButton();
@@ -136,8 +147,15 @@ namespace Sprocket
 
             // body
             _platformSelect = new PillSelect();
+            _platformSelect.ShowScanRootsFooter = true;
             _platformSelect.SelectedIndexChanged += delegate { UpdateForSelection(); };
+            _platformSelect.AddRootRequested += AddRootClicked;
+            _platformSelect.RemoveRootRequested += RemoveRootClicked;
             Controls.Add(_platformSelect);
+
+            _banner = new InfoBanner();
+            _banner.Visible = false;
+            Controls.Add(_banner);
 
             _statusPanel = new StatusPanel();
             Controls.Add(_statusPanel);
@@ -149,15 +167,20 @@ namespace Sprocket
             Controls.Add(_emptyCard);
 
             _launchButton = new HeroButton();
-            _launchButton.Text = "LAUNCH WORKBENCH";
+            _launchButton.Text = "Launch Workbench";
             _launchButton.Click += delegate { LaunchSelected(ProcessLauncher.LaunchWorkbench); };
             Controls.Add(_launchButton);
 
+            _daemonButton = new HeroButton();
+            _daemonButton.Text = "Daemon";
+            _daemonButton.Click += DaemonButtonClicked;
+            Controls.Add(_daemonButton);
+
             _quickLabel = new Label();
-            _quickLabel.Text = SprocketTheme.Track("QUICK ACTIONS");
-            _quickLabel.ForeColor = SprocketTheme.TextFaint;
+            _quickLabel.Text = "Quick actions";
+            _quickLabel.ForeColor = SprocketTheme.TextSecondary;
             _quickLabel.BackColor = Color.Transparent;
-            _quickLabel.Font = new Font(SprocketTheme.BodyFamily, 7.25F, FontStyle.Bold);
+            _quickLabel.Font = new Font(SprocketTheme.BodyFamily, 8F);
             _quickLabel.AutoSize = true;
             Controls.Add(_quickLabel);
 
@@ -170,41 +193,39 @@ namespace Sprocket
             _openFolderTile = MakeTile("Open Folder", 0xE838);      // OpenFolderHorizontal
             _openFolderTile.Click += delegate { LaunchSelected(ProcessLauncher.OpenInstallFolder); };
 
-            _memoryTile = MakeTile("Memory Settings", 0xE713);      // Settings
+            _memoryTile = MakeTile("Memory", 0xE713);                // Settings
             _memoryTile.Click += MemoryTileClicked;
 
-            _addModulesTile = MakeTile("Add Modules", 0xE710);      // Add
-            _addModulesTile.Click += AddModulesClicked;
+            _modulesTile = MakeTile("Modules", "");
+            _modulesTile.Highlighted = true;
+            _modulesTile.CustomIconPaint = PaintModulesGlyph;
+            _modulesTile.Click += ModulesTileClicked;
 
             _installDaemonTile = MakeTile("Install Daemon", 0xE7EF); // Admin
             _installDaemonTile.Click += delegate { LaunchSelected(ProcessLauncher.LaunchPlatformDaemonInstaller); };
 
-            _importNavTile = MakeTile("Import Nav Tree", 0xE896);   // Download
+            _importNavTile = MakeTile("Import Nav", 0xE896);         // Download
             _importNavTile.Click += ImportNavTreeClicked;
 
-            _exportNavTile = MakeTile("Export Nav Tree", 0xE898);   // Upload
+            _exportNavTile = MakeTile("Export Nav", 0xE898);         // Upload
             _exportNavTile.Click += ExportNavTreeClicked;
-
-            _daemonToggleTile = MakeTile("Stop Daemon", 0xE71A);    // Stop
-            _daemonToggleTile.AccentColor = SprocketTheme.Danger;
-            _daemonToggleTile.Click += DaemonToggleClicked;
 
             _tiles = new IconTile[]
             {
-                _alarmTile, _consoleTile, _openFolderTile,
-                _memoryTile, _addModulesTile, _installDaemonTile,
-                _importNavTile, _exportNavTile, _daemonToggleTile
+                _alarmTile, _consoleTile, _openFolderTile, _memoryTile,
+                _modulesTile, _installDaemonTile, _importNavTile, _exportNavTile
             };
 
             // footer
-            _footerBar = new GradientBar();
-            Controls.Add(_footerBar);
+            _footerHairline = new Panel();
+            _footerHairline.BackColor = SprocketTheme.Hairline;
+            Controls.Add(_footerHairline);
 
             _versionLabel = new Label();
-            _versionLabel.Text = "V" + AppVersion.Display;
-            _versionLabel.ForeColor = SprocketTheme.TextFaint;
+            _versionLabel.Text = "v" + AppVersion.Display;
+            _versionLabel.ForeColor = SprocketTheme.TextTertiary;
             _versionLabel.BackColor = Color.Transparent;
-            _versionLabel.Font = new Font(SprocketTheme.BodyFamily, 6.75F, FontStyle.Bold);
+            _versionLabel.Font = new Font(SprocketTheme.BodyFamily, 7.5F);
             _versionLabel.AutoSize = true;
             Controls.Add(_versionLabel);
 
@@ -213,11 +234,11 @@ namespace Sprocket
             _updateLink.Visible = false;
             _updateLink.AutoSize = true;
             _updateLink.BackColor = Color.Transparent;
-            _updateLink.LinkColor = SprocketTheme.EmberLight;
-            _updateLink.ActiveLinkColor = SprocketTheme.Sun;
-            _updateLink.VisitedLinkColor = SprocketTheme.EmberLight;
+            _updateLink.LinkColor = SprocketTheme.AccentDeep;
+            _updateLink.ActiveLinkColor = SprocketTheme.Accent;
+            _updateLink.VisitedLinkColor = SprocketTheme.AccentDeep;
             _updateLink.LinkBehavior = LinkBehavior.HoverUnderline;
-            _updateLink.Font = new Font(SprocketTheme.BodyFamily, 6.75F, FontStyle.Bold);
+            _updateLink.Font = new Font(SprocketTheme.BodyFamily, 7.5F);
             _updateLink.Click += delegate
             {
                 string url = _updateLink.Tag as string;
@@ -231,11 +252,32 @@ namespace Sprocket
 
         private IconTile MakeTile(string text, int glyphCodepoint)
         {
+            return MakeTile(text, SprocketTheme.Glyph(glyphCodepoint));
+        }
+
+        private IconTile MakeTile(string text, string glyph)
+        {
             IconTile t = new IconTile();
             t.Text = text;
-            t.Glyph = SprocketTheme.Glyph(glyphCodepoint);
+            t.Glyph = glyph;
             Controls.Add(t);
             return t;
+        }
+
+        private static void PaintModulesGlyph(Graphics g, Rectangle rect, Color color)
+        {
+            const int cell = 6;
+            const int gap = 3;
+            int totalW = cell * 2 + gap;
+            int startX = rect.X + (rect.Width - totalW) / 2;
+            int startY = rect.Y + (rect.Height - totalW) / 2;
+            using (SolidBrush b = new SolidBrush(color))
+            {
+                g.FillRectangle(b, startX, startY, cell, cell);
+                g.FillRectangle(b, startX + cell + gap, startY, cell, cell);
+                g.FillRectangle(b, startX, startY + cell + gap, cell, cell);
+                g.FillRectangle(b, startX + cell + gap, startY + cell + gap, cell, cell);
+            }
         }
 
         private void DoLayout()
@@ -244,30 +286,40 @@ namespace Sprocket
             if (w < 100) return;
 
             // header
-            _gear.SetBounds(Gutter, 26, 46, 46);
-            _title.SetBounds(Gutter + 58, 22, w - 58 - 150, 36);
-            _subtitle.SetBounds(Gutter + 61, 57, w - 61 - 150, 14);
-            _refreshButton.SetBounds(ClientSize.Width - Gutter - 42, 28, 42, 42);
-            _foldersButton.SetBounds(ClientSize.Width - Gutter - 42 * 2 - 8, 28, 42, 42);
+            _gear.SetBounds(Gutter, 24, 38, 38);
+            _title.SetBounds(Gutter + 50, 18, w - 50 - 150, 26);
+            _subtitle.SetBounds(Gutter + 51, 46, w - 51 - 150, 16);
+            _refreshButton.SetBounds(ClientSize.Width - Gutter - 34, 24, 34, 34);
+            _foldersButton.SetBounds(ClientSize.Width - Gutter - 34 * 2 - 8, 24, 34, 34);
 
-            int y = 96;
-            _platformSelect.SetBounds(Gutter, y, w, 44);
+            int y = 76;
+            _platformSelect.SetBounds(Gutter, y, w, 36);
             _emptyCard.SetBounds(Gutter, y, w, 150);
-            y += 58;
+            y += 36 + 10;
 
-            _statusPanel.SetBounds(Gutter, y, w, 158);
-            y += 172;
+            if (_banner.Visible)
+            {
+                _banner.SetBounds(Gutter, y, w, 42);
+                y += 42 + 10;
+            }
 
-            _launchButton.SetBounds(Gutter, y, w, 56);
-            y += 72;
+            _statusPanel.SetBounds(Gutter, y, w, 150);
+            y += 150 + 14;
+
+            int rowW = w - 8;
+            int launchW = (int)(rowW * 1.6 / 2.6);
+            int daemonW = rowW - launchW;
+            _launchButton.SetBounds(Gutter, y, launchW, 38);
+            _daemonButton.SetBounds(Gutter + launchW + 8, y, daemonW, 38);
+            y += 38 + 20;
 
             _quickLabel.Location = new Point(Gutter + 2, y);
-            y += 22;
+            y += 20;
 
-            int cols = w >= 450 ? 3 : 2;
-            int gap = 10;
+            const int cols = 4;
+            const int gap = 8;
+            const int tileH = 56;
             int tileW = (w - (cols - 1) * gap) / cols;
-            int tileH = 66;
             for (int i = 0; i < _tiles.Length; i++)
             {
                 int col = i % cols;
@@ -277,11 +329,11 @@ namespace Sprocket
             int rows = (_tiles.Length + cols - 1) / cols;
             y += rows * (tileH + gap) - gap;
 
-            int footerY = Math.Max(y + 16, ClientSize.Height - 50);
-            _footerBar.SetBounds(Gutter, footerY, w, 2);
+            int footerY = Math.Max(y + 16, ClientSize.Height - 46);
+            _footerHairline.SetBounds(Gutter, footerY, w, 1);
             _versionLabel.Location = new Point(
-                ClientSize.Width - Gutter - _versionLabel.PreferredWidth, footerY + 12);
-            _updateLink.Location = new Point(Gutter, footerY + 12);
+                ClientSize.Width - Gutter - _versionLabel.PreferredWidth, footerY + 11);
+            _updateLink.Location = new Point(Gutter, footerY + 11);
         }
 
         // ---------------------------------------------------------- scanning
@@ -289,6 +341,7 @@ namespace Sprocket
         private void Rescan()
         {
             _platforms = PlatformScanner.Scan();
+            _platformSelect.ScanRoots = new List<string>(UserSettings.Load().Folders);
 
             _platformSelect.Items.Clear();
             foreach (NiagaraPlatform p in _platforms)
@@ -298,16 +351,24 @@ namespace Sprocket
             _platformSelect.Visible = any;
             _statusPanel.Visible = any;
             _launchButton.Visible = any;
+            _daemonButton.Visible = any;
             _quickLabel.Visible = any;
             for (int i = 0; i < _tiles.Length; i++)
                 _tiles[i].Visible = any;
             _emptyCard.Visible = !any;
+            if (!any) _banner.Visible = false;
+
+            RefreshGlobalDaemonState();
 
             if (any)
             {
                 int idx = FindLastUsedIndex();
                 _platformSelect.SelectedIndex = idx >= 0 ? idx : 0;
                 UpdateForSelection();
+            }
+            else
+            {
+                DoLayout();
             }
         }
 
@@ -343,6 +404,12 @@ namespace Sprocket
             get { return (NiagaraPlatform)_platformSelect.SelectedItem; }
         }
 
+        private static bool SamePlatform(NiagaraPlatform a, NiagaraPlatform b)
+        {
+            if (a == null || b == null) return false;
+            return string.Equals(a.InstallDir, b.InstallDir, StringComparison.OrdinalIgnoreCase);
+        }
+
         private void UpdateForSelection()
         {
             NiagaraPlatform p = SelectedPlatform;
@@ -358,7 +425,7 @@ namespace Sprocket
             _consoleTile.Enabled = p.HasConsole;
             _installDaemonTile.Enabled = p.HasPlatDaemonInstaller;
 
-            RefreshDaemonState(p);
+            UpdateDaemonUi();
 
             HostIdResolver.ResolveAsync(p, delegate(string hostId)
             {
@@ -405,47 +472,250 @@ namespace Sprocket
             _updateLink.Visible = true;
         }
 
-        private void RefreshDaemonState(NiagaraPlatform p)
-        {
-            string serviceName = DaemonStatus.ServiceNameFor(p);
-            _daemonToggleTile.Enabled = serviceName != null;
+        // ------------------------------------------------------ daemon (Feature 2)
 
-            DaemonState state = serviceName != null ? DaemonStatus.Query(p) : DaemonState.Unknown;
-            switch (state)
+        private void RefreshGlobalDaemonState()
+        {
+            _runningPlatform = null;
+            foreach (NiagaraPlatform p in _platforms)
             {
-                case DaemonState.Running:
-                    _statusPanel.StateColor = SprocketTheme.Success;
-                    _statusPanel.StateText = "RUNNING";
-                    _daemonToggleTile.Text = "Stop Daemon";
-                    _daemonToggleTile.Glyph = SprocketTheme.Glyph(0xE71A); // Stop
-                    _daemonToggleTile.AccentColor = SprocketTheme.Danger;
+                DaemonState st = DaemonStatus.Query(p);
+                if (st == DaemonState.Running || st == DaemonState.Starting || st == DaemonState.Stopping)
+                {
+                    _runningPlatform = p;
                     break;
-                case DaemonState.Stopped:
-                    _statusPanel.StateColor = SprocketTheme.Danger;
-                    _statusPanel.StateText = "STOPPED";
-                    _daemonToggleTile.Text = "Start Daemon";
-                    _daemonToggleTile.Glyph = SprocketTheme.Glyph(0xE768); // Play
-                    _daemonToggleTile.AccentColor = SprocketTheme.Success;
-                    break;
-                case DaemonState.Starting:
-                case DaemonState.Stopping:
-                    _statusPanel.StateColor = SprocketTheme.Sun;
-                    _statusPanel.StateText = state == DaemonState.Starting ? "STARTING…" : "STOPPING…";
-                    _daemonToggleTile.Text = state == DaemonState.Starting ? "Starting…" : "Stopping…";
-                    _daemonToggleTile.Glyph = SprocketTheme.Glyph(0xE72C); // Refresh (in-progress)
-                    _daemonToggleTile.AccentColor = SprocketTheme.Sun;
-                    _daemonToggleTile.Enabled = false; // block re-click until it settles
-                    break;
-                default:
-                    _statusPanel.StateColor = SprocketTheme.TextFaint;
-                    _statusPanel.StateText = "UNKNOWN";
-                    _daemonToggleTile.Text = "Daemon";
-                    _daemonToggleTile.Glyph = SprocketTheme.Glyph(0xE946); // Info
-                    _daemonToggleTile.AccentColor = SprocketTheme.Ember;
-                    break;
+                }
+            }
+        }
+
+        private void UpdateDaemonUi()
+        {
+            NiagaraPlatform p = SelectedPlatform;
+            if (p == null) return;
+
+            bool selIsRunning = SamePlatform(p, _runningPlatform);
+            bool somethingElseRunning = _runningPlatform != null && !selIsRunning;
+            bool involvedInOp = _opPhase != null && (SamePlatform(p, _opFrom) || SamePlatform(p, _opTo));
+
+            // status chip
+            if (involvedInOp)
+            {
+                bool stoppingHere = _opPhase == "stopping" && SamePlatform(p, _opFrom);
+                _statusPanel.StateText = stoppingHere ? "STOPPING…" : "STARTING…";
+                _statusPanel.StateColor = SprocketTheme.Pending;
+                _statusPanel.StateBg = SprocketTheme.PendingTintBg;
+                _statusPanel.StateBorder = SprocketTheme.PendingTintBorder;
+            }
+            else if (selIsRunning)
+            {
+                _statusPanel.StateText = "RUNNING";
+                _statusPanel.StateColor = SprocketTheme.Success;
+                _statusPanel.StateBg = SprocketTheme.SuccessTintBg;
+                _statusPanel.StateBorder = SprocketTheme.SuccessTintBorder;
+            }
+            else
+            {
+                _statusPanel.StateText = "STOPPED";
+                _statusPanel.StateColor = SprocketTheme.Danger;
+                _statusPanel.StateBg = SprocketTheme.DangerTintBg;
+                _statusPanel.StateBorder = SprocketTheme.DangerTintBorder;
             }
             _statusPanel.Invalidate();
-            _daemonToggleTile.Invalidate();
+
+            // dropdown pill: status dot + "DAEMON ON x.y.z" hint
+            _platformSelect.ShowStatusDot = true;
+            _platformSelect.StatusDotColor = (selIsRunning && _opPhase == null)
+                ? SprocketTheme.Success : SprocketTheme.TextTertiary;
+            _platformSelect.Hint = (somethingElseRunning && _opPhase == null)
+                ? "DAEMON ON " + _runningPlatform.DisplayName : "";
+            _platformSelect.RunningItem = _runningPlatform;
+            _platformSelect.Invalidate();
+
+            // banner
+            bool bannerWasVisible = _banner.Visible;
+            if (_opPhase != null)
+            {
+                _banner.Message = _opPhase == "stopping"
+                    ? "Stopping daemon on " + _opFrom.DisplayName + "…"
+                    : "Starting daemon on " + _opTo.DisplayName + "…";
+                _banner.StepText = _opTwoStep ? (_opPhase == "stopping" ? "STEP 1 OF 2" : "STEP 2 OF 2") : "";
+                _banner.Visible = true;
+            }
+            else if (somethingElseRunning)
+            {
+                _banner.Message = "Daemon is currently running on " + _runningPlatform.DisplayName
+                    + ". Starting it here will stop that one first — one click does both.";
+                _banner.StepText = "";
+                _banner.Visible = true;
+            }
+            else
+            {
+                _banner.Visible = false;
+            }
+            _banner.Invalidate();
+
+            // daemon button
+            bool serviceKnown = DaemonStatus.ServiceNameFor(p) != null;
+            if (_opPhase != null)
+            {
+                _daemonButton.Enabled = false;
+                _daemonButton.Text = involvedInOp
+                    ? (_opPhase == "stopping" ? "Stopping…" : "Starting…")
+                    : (somethingElseRunning ? "⇄ Switch daemon here" : (selIsRunning ? "Stop daemon" : "Start daemon"));
+                _daemonButton.FillColor = SprocketTheme.PendingTintBg;
+                _daemonButton.FillHoverColor = SprocketTheme.PendingTintBg;
+                _daemonButton.TextColor = SprocketTheme.Pending;
+                _daemonButton.BorderColor = SprocketTheme.PendingTintBorder;
+            }
+            else if (!serviceKnown)
+            {
+                _daemonButton.Enabled = false;
+                _daemonButton.Text = "Daemon";
+                _daemonButton.FillColor = SprocketTheme.CardBg;
+                _daemonButton.FillHoverColor = SprocketTheme.CardBg;
+                _daemonButton.TextColor = SprocketTheme.TextTertiary;
+                _daemonButton.BorderColor = SprocketTheme.FieldBorder;
+            }
+            else if (selIsRunning)
+            {
+                _daemonButton.Enabled = true;
+                _daemonButton.Text = "Stop daemon";
+                _daemonButton.FillColor = SprocketTheme.CardBg;
+                _daemonButton.FillHoverColor = SprocketTheme.FieldHoverBg;
+                _daemonButton.TextColor = SprocketTheme.Danger;
+                _daemonButton.BorderColor = SprocketTheme.FieldBorder;
+            }
+            else if (!somethingElseRunning)
+            {
+                _daemonButton.Enabled = true;
+                _daemonButton.Text = "Start daemon";
+                _daemonButton.FillColor = SprocketTheme.CardBg;
+                _daemonButton.FillHoverColor = SprocketTheme.FieldHoverBg;
+                _daemonButton.TextColor = SprocketTheme.Success;
+                _daemonButton.BorderColor = SprocketTheme.FieldBorder;
+            }
+            else
+            {
+                _daemonButton.Enabled = true;
+                _daemonButton.Text = "⇄ Switch daemon here";
+                _daemonButton.FillColor = SprocketTheme.PendingTintBg;
+                _daemonButton.FillHoverColor = SprocketTheme.PendingTintBg;
+                _daemonButton.TextColor = SprocketTheme.Pending;
+                _daemonButton.BorderColor = SprocketTheme.PendingTintBorder;
+            }
+            _daemonButton.Invalidate();
+
+            if (bannerWasVisible != _banner.Visible) DoLayout();
+        }
+
+        private void DaemonButtonClicked(object sender, EventArgs e)
+        {
+            NiagaraPlatform p = SelectedPlatform;
+            if (p == null || _opPhase != null) return;
+            if (DaemonStatus.ServiceNameFor(p) == null) return;
+
+            bool selIsRunning = SamePlatform(p, _runningPlatform);
+            bool somethingElseRunning = _runningPlatform != null && !selIsRunning;
+
+            if (selIsRunning)
+                StartSimpleToggle(p, false);
+            else if (!somethingElseRunning)
+                StartSimpleToggle(p, true);
+            else
+                StartSwitch(_runningPlatform, p);
+        }
+
+        private void StartSimpleToggle(NiagaraPlatform p, bool turnOn)
+        {
+            string serviceName = DaemonStatus.ServiceNameFor(p);
+
+            _opPhase = turnOn ? "starting" : "stopping";
+            _opFrom = turnOn ? null : p;
+            _opTo = turnOn ? p : null;
+            _opTwoStep = false;
+            UpdateDaemonUi();
+
+            Thread t = new Thread(delegate()
+            {
+                bool ok = DaemonStatus.SetRunning(serviceName, turnOn);
+                if (ok) DaemonStatus.WaitForSettled(serviceName, 45000);
+
+                if (IsDisposed) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (IsDisposed) return;
+                    _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
+                    if (!ok)
+                    {
+                        MessageBox.Show(
+                            "Couldn't " + (turnOn ? "start" : "stop") + " the daemon service.",
+                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    RefreshGlobalDaemonState();
+                    UpdateDaemonUi();
+                });
+            });
+            t.IsBackground = true;
+            t.Start();
+        }
+
+        private void StartSwitch(NiagaraPlatform from, NiagaraPlatform to)
+        {
+            _opPhase = "stopping"; _opFrom = from; _opTo = to; _opTwoStep = true;
+            UpdateDaemonUi();
+
+            Thread t = new Thread(delegate()
+            {
+                string oldService = DaemonStatus.ServiceNameFor(from);
+                bool okStop = oldService != null && DaemonStatus.SetRunning(oldService, false);
+                if (okStop) DaemonStatus.WaitForSettled(oldService, 45000);
+
+                if (!okStop)
+                {
+                    if (IsDisposed) return;
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        if (IsDisposed) return;
+                        _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
+                        MessageBox.Show(
+                            "Couldn't stop the daemon on " + from.DisplayName + " — leaving it running.",
+                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        RefreshGlobalDaemonState();
+                        UpdateDaemonUi();
+                    });
+                    return;
+                }
+
+                if (IsDisposed) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (IsDisposed) return;
+                    _opPhase = "starting";
+                    UpdateDaemonUi();
+                });
+
+                string newService = DaemonStatus.ServiceNameFor(to);
+                bool okStart = newService != null && DaemonStatus.SetRunning(newService, true);
+                if (okStart) DaemonStatus.WaitForSettled(newService, 45000);
+
+                if (IsDisposed) return;
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    if (IsDisposed) return;
+                    _opPhase = null; _opFrom = null; _opTo = null; _opTwoStep = false;
+                    if (!okStart)
+                    {
+                        MessageBox.Show(
+                            "Stopped the daemon on " + from.DisplayName + ", but couldn't start it on "
+                            + to.DisplayName + ".",
+                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    RefreshGlobalDaemonState();
+                    UpdateDaemonUi();
+                });
+            });
+            t.IsBackground = true;
+            t.Start();
         }
 
         // ----------------------------------------------------------- actions
@@ -465,6 +735,34 @@ namespace Sprocket
             Rescan();
         }
 
+        private void AddRootClicked()
+        {
+            using (FolderBrowserDialog dlg = new FolderBrowserDialog())
+            {
+                dlg.Description = "Pick a folder that contains Niagara installs "
+                    + "(the folder itself, or <folder>\\<install>\\bin\\wb.exe).";
+                dlg.ShowNewFolderButton = false;
+
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+                string folder = dlg.SelectedPath.TrimEnd(Path.DirectorySeparatorChar);
+                UserSettings settings = UserSettings.Load();
+                if (UserSettings.ContainsIgnoreCase(settings.Folders, folder)) return;
+
+                settings.Folders.Add(folder);
+                settings.Save();
+                Rescan();
+            }
+        }
+
+        private void RemoveRootClicked(string folder)
+        {
+            UserSettings settings = UserSettings.Load();
+            settings.Folders.Remove(folder);
+            settings.Save();
+            Rescan();
+        }
+
         private void MemoryTileClicked(object sender, EventArgs e)
         {
             NiagaraPlatform p = SelectedPlatform;
@@ -473,35 +771,12 @@ namespace Sprocket
                 dlg.ShowDialog(this);
         }
 
-        private void AddModulesClicked(object sender, EventArgs e)
+        private void ModulesTileClicked(object sender, EventArgs e)
         {
             NiagaraPlatform p = SelectedPlatform;
             if (p == null) return;
-
-            using (OpenFileDialog dlg = new OpenFileDialog())
-            {
-                dlg.Title = "Add Niagara Modules";
-                dlg.Filter = "Niagara Modules (*.jar)|*.jar";
-                dlg.Multiselect = true;
-
-                if (dlg.ShowDialog(this) != DialogResult.OK) return;
-
-                try
-                {
-                    if (!Directory.Exists(p.ModulesDir)) Directory.CreateDirectory(p.ModulesDir);
-                    foreach (string src in dlg.FileNames)
-                        File.Copy(src, Path.Combine(p.ModulesDir, Path.GetFileName(src)), true);
-
-                    MessageBox.Show(dlg.FileNames.Length + " module(s) copied to " + p.ModulesDir +
-                        ".\r\n\r\nRun Software Manager in Workbench to install them into a station.",
-                        "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show("Couldn't copy modules:\r\n" + ex.Message, "Sprocket",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
-            }
+            using (ModulesForm dlg = new ModulesForm(_platforms, p))
+                dlg.ShowDialog(this);
         }
 
         private void ImportNavTreeClicked(object sender, EventArgs e)
@@ -563,55 +838,5 @@ namespace Sprocket
                 }
             }
         }
-
-        private void DaemonToggleClicked(object sender, EventArgs e)
-        {
-            NiagaraPlatform p = SelectedPlatform;
-            if (p == null) return;
-
-            string serviceName = DaemonStatus.ServiceNameFor(p);
-            if (serviceName == null) return;
-
-            bool currentlyRunning = DaemonStatus.Query(p) == DaemonState.Running;
-
-            // Optimistic transitional UI: a Niagara daemon can take well over a minute to actually
-            // reach RUNNING, and starting it may pop a UAC prompt the user has to respond to. Doing
-            // this synchronously (old behavior) froze the UI, and refreshing immediately after just
-            // read the still-PENDING state as Unknown and silently reverted the button — which is
-            // what made toggling look broken, especially on a platform whose daemon takes longer to
-            // settle. Show progress now, do the real work on a background thread, and only settle
-            // the tile once the service actually reaches a terminal state.
-            _daemonToggleTile.Enabled = false;
-            _statusPanel.StateColor = SprocketTheme.Sun;
-            _statusPanel.StateText = currentlyRunning ? "STOPPING…" : "STARTING…";
-            _daemonToggleTile.Text = currentlyRunning ? "Stopping…" : "Starting…";
-            _daemonToggleTile.Invalidate();
-            _statusPanel.Invalidate();
-
-            Thread t = new Thread(delegate()
-            {
-                bool ok = DaemonStatus.SetRunning(serviceName, !currentlyRunning);
-                if (ok) DaemonStatus.WaitForSettled(serviceName, 45000);
-
-                if (IsDisposed) return;
-                BeginInvoke((MethodInvoker)delegate
-                {
-                    if (IsDisposed) return;
-                    if (SelectedPlatform != p) return; // user moved to another platform; its own
-                                                        // RefreshDaemonState already took over
-
-                    if (!ok)
-                    {
-                        MessageBox.Show(
-                            "Couldn't " + (currentlyRunning ? "stop" : "start") + " the daemon service.",
-                            "Sprocket", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    }
-                    RefreshDaemonState(p);
-                });
-            });
-            t.IsBackground = true;
-            t.Start();
-        }
     }
 }
-

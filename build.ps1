@@ -8,6 +8,7 @@ $csc = "C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
     /out:"$root\build\sprocket.exe" `
     /win32icon:"$root\assets\sprocket.ico" `
     /r:System.dll /r:System.Drawing.dll /r:System.Windows.Forms.dll `
+    /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll `
     "$root\src\*.cs"
 if ($LASTEXITCODE -ne 0) { throw "csc failed with exit code $LASTEXITCODE" }
 

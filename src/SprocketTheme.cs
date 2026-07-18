@@ -1,32 +1,57 @@
-using System.Drawing;
+﻿using System.Drawing;
 
 namespace Sprocket
 {
-    /// <summary>Sprocket's standalone "Forge" palette — independent of any distributor's brand.</summary>
+    /// <summary>Sprocket's "calm dark Forge" palette — graphite + ember, flat surfaces
+    /// (no aurora blob backdrop / shimmer / glow hovers).</summary>
     internal static class SprocketTheme
     {
         // Surfaces
-        public static readonly Color Ink = ColorTranslator.FromHtml("#0d0d10");
-        public static readonly Color InkRaised = ColorTranslator.FromHtml("#17171b");
-        public static readonly Color InkPanel = ColorTranslator.FromHtml("#1b1b20");
-        public static readonly Color InkBorder = ColorTranslator.FromHtml("#2d2d34");
+        public static readonly Color WindowBg = ColorTranslator.FromHtml("#101014");
+        public static readonly Color TitleBarBg = ColorTranslator.FromHtml("#17171b");
+        public static readonly Color Hairline = ColorTranslator.FromHtml("#232329");
+        public static readonly Color CardBg = ColorTranslator.FromHtml("#17171b");
+        public static readonly Color CardBorder = ColorTranslator.FromHtml("#2d2d34");
+
+        // Fields / inputs
+        public static readonly Color FieldBorder = ColorTranslator.FromHtml("#2d2d34");
+        // No separate Fluent "field cue" in the dark Forge look — same as FieldBorder.
+        public static readonly Color FieldBorderBottom = FieldBorder;
+        public static readonly Color FieldHoverBg = ColorTranslator.FromHtml("#1c1c22");
+
+        // Misc surfaces
+        public static readonly Color TileBorder = ColorTranslator.FromHtml("#26262c");
+        public static readonly Color TileLabelText = ColorTranslator.FromHtml("#b7bbc1");
+        public static readonly Color GhostHoverBg = ColorTranslator.FromHtml("#232329");
+        public static readonly Color ChipBg = CardBg;
+        public static readonly Color RowHoverBg = ColorTranslator.FromHtml("#1c1c22");
+        public static readonly Color RowDivider = ColorTranslator.FromHtml("#1c1c21");
 
         // Brand
-        public static readonly Color Ember = ColorTranslator.FromHtml("#f97316");
-        public static readonly Color EmberLight = ColorTranslator.FromHtml("#fdba74");
-        public static readonly Color Rust = ColorTranslator.FromHtml("#c2410c");
-        public static readonly Color Flame = ColorTranslator.FromHtml("#dc2626");
-        public static readonly Color Sun = ColorTranslator.FromHtml("#fcd34d");
-        public static readonly Color SunLight = ColorTranslator.FromHtml("#fde68a");
+        public static readonly Color Accent = ColorTranslator.FromHtml("#f97316");
+        public static readonly Color AccentHover = ColorTranslator.FromHtml("#fb8a33");
+        // On dark surfaces the "readable accent" shade needs to go lighter, not darker.
+        public static readonly Color AccentDeep = ColorTranslator.FromHtml("#fdba74");
+        public static readonly Color AccentTintBg = ColorTranslator.FromHtml("#2a1c12");
+        public static readonly Color AccentTintBorder = ColorTranslator.FromHtml("#5c3618");
 
         // Text
         public static readonly Color TextPrimary = ColorTranslator.FromHtml("#eef0f2");
-        public static readonly Color TextMuted = ColorTranslator.FromHtml("#999ea6");
-        public static readonly Color TextFaint = ColorTranslator.FromHtml("#5b5f67");
+        public static readonly Color TextSecondary = ColorTranslator.FromHtml("#999ea6");
+        public static readonly Color TextTertiary = ColorTranslator.FromHtml("#5b5f67");
 
         // Status
-        public static readonly Color Danger = ColorTranslator.FromHtml("#ef4444");
         public static readonly Color Success = ColorTranslator.FromHtml("#22c55e");
+        public static readonly Color SuccessTintBg = ColorTranslator.FromHtml("#152a1d");
+        public static readonly Color SuccessTintBorder = ColorTranslator.FromHtml("#1f5c34");
+        public static readonly Color Danger = ColorTranslator.FromHtml("#ef4444");
+        public static readonly Color DangerTintBg = ColorTranslator.FromHtml("#241416");
+        public static readonly Color DangerTintBorder = ColorTranslator.FromHtml("#6b2727");
+        // Pending/switchover state is its own amber, distinct from the ember brand accent
+        // (matches the reviewed mock's daemon-switchover treatment).
+        public static readonly Color Pending = ColorTranslator.FromHtml("#fcd34d");
+        public static readonly Color PendingTintBg = ColorTranslator.FromHtml("#231f18");
+        public static readonly Color PendingTintBorder = ColorTranslator.FromHtml("#4a4020");
 
         public static readonly FontFamily HeadingFamily = ResolveFamily("Segoe UI Semibold", "Segoe UI");
         public static readonly FontFamily BodyFamily = ResolveFamily("Segoe UI", "Segoe UI");
@@ -38,20 +63,6 @@ namespace Sprocket
         public static string Glyph(int codepoint)
         {
             return char.ConvertFromUtf32(codepoint);
-        }
-
-        /// <summary>Letter-spaced micro-label text ("PLATFORM" → "P L A T F O R M").</summary>
-        public static string Track(string s)
-        {
-            System.Text.StringBuilder sb = new System.Text.StringBuilder(s.Length * 2);
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (c == ' ') { sb.Append("  "); continue; }
-                sb.Append(c);
-                if (i < s.Length - 1 && s[i + 1] != ' ') sb.Append(' ');
-            }
-            return sb.ToString();
         }
 
         private static FontFamily ResolveFamily(string preferred, string fallback)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.IO;
 using System.Windows.Forms;
@@ -6,7 +6,7 @@ using System.Windows.Forms;
 namespace Sprocket
 {
     /// <summary>Extra Niagara scan folders + Workbench language — WorkPlace Launcher's
-    /// "+Folders" and language settings, restyled.</summary>
+    /// "+Folders" and language settings, Fluent light (mock 3a).</summary>
     internal sealed class LocationsForm : Form, IAuroraHost
     {
         private static readonly string[] LocaleCodes = new[] { "en", "fr", "de", "es" };
@@ -48,51 +48,58 @@ namespace Sprocket
             MaximizeBox = false;
             MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
-            BackColor = SprocketTheme.Ink;
+            BackColor = SprocketTheme.WindowBg;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                 | ControlStyles.ResizeRedraw, true);
 
-            const int m = 28;
+            const int m = 26;
             int w = ClientSize.Width - m * 2;
-
-            AddMicro("SPROCKET SETTINGS", m, 22, w);
 
             Label title = new Label();
             title.Text = "Locations & Language";
             title.UseMnemonic = false;
             title.ForeColor = SprocketTheme.TextPrimary;
             title.BackColor = Color.Transparent;
-            title.Font = new Font(SprocketTheme.HeadingFamily, 13F, FontStyle.Bold);
-            title.SetBounds(m, 38, w, 26);
+            title.Font = new Font(SprocketTheme.HeadingFamily, 14F, FontStyle.Bold);
+            title.SetBounds(m, 20, w, 26);
             Controls.Add(title);
 
-            AddMicro("EXTRA NIAGARA LOCATIONS", m, 78, w);
+            Label subtitle = new Label();
+            subtitle.Text = "Sprocket settings";
+            subtitle.ForeColor = SprocketTheme.TextSecondary;
+            subtitle.BackColor = Color.Transparent;
+            subtitle.Font = new Font(SprocketTheme.BodyFamily, 8.25F);
+            subtitle.SetBounds(m, 46, w, 16);
+            Controls.Add(subtitle);
+
+            AddSectionLabel("Extra Niagara locations", m, 76, w);
 
             Label note = new Label();
             note.Text = "C:\\, Program Files and Program Files (x86) are always scanned. "
-                + "Add folders here for installs that live anywhere else.";
-            note.ForeColor = SprocketTheme.TextMuted;
+                + "Add root folders here for installs that live anywhere else — they're remembered on this machine.";
+            note.ForeColor = SprocketTheme.TextSecondary;
             note.BackColor = Color.Transparent;
-            note.Font = new Font(SprocketTheme.BodyFamily, 8.25F);
-            note.SetBounds(m, 92, w, 30);
+            note.Font = new Font(SprocketTheme.BodyFamily, 8F);
+            note.SetBounds(m, 94, w, 32);
             Controls.Add(note);
 
             _folderList = new FolderList();
-            _folderList.SetBounds(m, 126, w, 130);
+            _folderList.SetBounds(m, 130, w, 110);
             _folderList.SetFolders(_settings.Folders);
             _folderList.RemoveClicked += RemoveFolder;
             Controls.Add(_folderList);
 
             TextGhostButton addButton = new TextGhostButton();
-            addButton.Text = "Add Folder…";
-            addButton.SetBounds(m, 264, 150, 38);
+            addButton.Text = "Add folder…";
+            addButton.Glyph = SprocketTheme.Glyph(0xE710);
+            addButton.SetBounds(m, 248, 140, 32);
             addButton.Click += AddFolderClicked;
             Controls.Add(addButton);
 
-            AddMicro("WORKBENCH LANGUAGE", m, 318, w);
+            AddSectionLabel("Workbench language", m, 298, w);
 
             _languageSelect = new PillSelect();
-            _languageSelect.SetBounds(m, 334, 200, 40);
+            _languageSelect.SetBounds(m, 316, 200, 34);
             for (int i = 0; i < LocaleNames.Length; i++)
                 _languageSelect.Items.Add(LocaleNames[i]);
             _languageSelect.SelectedIndex = Math.Max(0, Array.IndexOf(LocaleCodes, _settings.Locale));
@@ -103,22 +110,27 @@ namespace Sprocket
             };
             Controls.Add(_languageSelect);
 
+            Panel hairline = new Panel();
+            hairline.BackColor = SprocketTheme.Hairline;
+            hairline.SetBounds(m, 366, w, 1);
+            Controls.Add(hairline);
+
             HeroButton done = new HeroButton();
-            done.Text = "DONE";
-            done.Font = new Font(SprocketTheme.HeadingFamily, 10F, FontStyle.Bold);
-            done.SetBounds(ClientSize.Width - m - 150, 384, 150, 42);
+            done.Text = "Done";
+            done.Font = new Font(SprocketTheme.HeadingFamily, 10.5F, FontStyle.Bold);
+            done.SetBounds(ClientSize.Width - m - 130, 380, 130, 34);
             done.Click += delegate { DialogResult = DialogResult.OK; Close(); };
             Controls.Add(done);
         }
 
-        private void AddMicro(string text, int x, int y, int w)
+        private void AddSectionLabel(string text, int x, int y, int w)
         {
             Label l = new Label();
-            l.Text = SprocketTheme.Track(text);
-            l.ForeColor = SprocketTheme.TextFaint;
+            l.Text = text;
+            l.ForeColor = SprocketTheme.TextPrimary;
             l.BackColor = Color.Transparent;
-            l.Font = new Font(SprocketTheme.BodyFamily, 6.75F, FontStyle.Bold);
-            l.SetBounds(x, y, w, 12);
+            l.Font = new Font(SprocketTheme.BodyFamily, 9F, FontStyle.Bold);
+            l.SetBounds(x, y, w, 16);
             Controls.Add(l);
         }
 
