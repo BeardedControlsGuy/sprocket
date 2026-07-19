@@ -12,6 +12,22 @@ Installs per-user — no admin rights needed. Sprocket checks for new releases o
 and will show a small "Update available" link in the footer if one exists; it never
 downloads or installs anything on its own, so upgrading is always your call.
 
+### "Windows protected your PC"
+
+The installer is not code-signed, so Windows SmartScreen will warn you the first time you
+run it. To continue: click **More info**, then **Run anyway**.
+
+This is expected and it is not a virus warning — SmartScreen shows it for any installer
+whose publisher it doesn't yet recognize, regardless of what the installer does. A
+certificate that removes the prompt outright is only issued to registered companies, and
+Sprocket is deliberately published without a company behind it so any integrator can ship
+it unbranded. If you'd rather verify before running, build it yourself from source with the
+steps below — it takes about ten seconds and needs nothing installed but Windows itself.
+
+Registering the platform daemon does prompt for administrator rights, separately and later.
+That one is real: it creates a Windows service, which Windows will not let any program do
+without consent.
+
 ## Build from source
 
 No Visual Studio or .NET SDK required — everything is built with the in-box .NET
