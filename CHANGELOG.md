@@ -1,5 +1,32 @@
 # Changelog
 
+## v3.1.3 — 2026-07-18
+
+**Fixed: the Daemon button did nothing.** Registering a platform daemon runs
+`bin\plat.exe installdaemon`, which creates a Windows service and so requires
+administrator rights. Sprocket launched it without elevation, and because `plat.exe` is a
+console program its window closed the instant it failed — so the click produced no service,
+no error, and no visible sign anything had happened. It now elevates properly, and when
+something does go wrong you get plat.exe's own message in a dialog instead of silence.
+Declining the Windows administrator prompt is treated as "cancelled", not as a failure.
+
+**Fixed: switching the daemon to another install could leave you with no daemon at all.**
+Windows registers exactly one Niagara daemon service, pointing at whichever install last
+registered it — there is no separate service per platform. The old "Switch daemon here"
+stopped the running daemon and then tried to start a service for the target install that
+had never existed, so it stopped one daemon without starting another. "Install daemon" and
+"Switch daemon" are now a single **Move daemon here** action that re-registers the service
+in one step, and it warns you first that the outgoing daemon's station will go down.
+
+**Fixed: on machines with more than one Niagara version, Memory Settings and Nav Tree
+import/export could read and write a different version's files.** The per-user home folder
+was pinned to `Niagara4.15` regardless of the install, so for example a 4.14 install edited
+the 4.15 home. It now follows the install's own version, and understands the AX 3.x layout.
+
+Also: daemon status is now detected by matching the service's own `niagarad.exe` path
+rather than a loose text match that could latch onto the wrong service, and status is
+checked once per rescan instead of once per detected install.
+
 ## v3.1.2 — 2026-07-18
 
 **Fixed the update checker itself** — it could silently never detect a newer release on
